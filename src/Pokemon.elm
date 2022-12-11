@@ -28,7 +28,7 @@ createPokemon pokeRecord =
 getFirst150 : { onResponse : Result Http.Error (List Pokemon) -> msg } -> Cmd msg
 getFirst150 options =
     Http.get
-        { url = "http://localhost:5000/api/v2/pokemon?limit=150"
+        { url = "https://pokeapi.co/api/v2/pokemon?limit=150"
         , expect = Http.expectJson options.onResponse pokeApiDecoder
         }
 
@@ -41,7 +41,7 @@ initEmptyPokemon =
 getPokemon : { name : String, onResponse : Result Http.Error Pokemon -> msg } -> Cmd msg
 getPokemon options =
     Http.get
-        { url = "http://localhost:5000/api/v2/pokemon/" ++ options.name
+        { url = "https://pokeapi.co/api/v2/pokemon/" ++ options.name
         , expect = Http.expectJson options.onResponse pokemonDetailsDecoder
         }
 
