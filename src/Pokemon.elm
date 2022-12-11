@@ -1,14 +1,18 @@
-module Pokemon exposing (Pokemon, getFirst150, viewPokemonList)
+module Pokemon exposing (Pokemon, getFirst150, getPokedexId, getPokemon, getPokemonName, getPokemonPicture, getPokemonTypes, initEmptyPokemon, viewPokemonList)
 
 import Html exposing (Html)
 import Html.Attributes exposing (alt, class, src)
 import Http
 import Json.Decode
+import Json.Decode.Pipeline exposing (required, requiredAt)
 import Route.Path
 
 
 type alias PokeRecord =
     { name : String
+    , order : Int
+    , picture : String
+    , types : List String
     }
 
 
@@ -16,7 +20,7 @@ type Pokemon
     = Pokemon PokeRecord
 
 
-createPokemon : { name : String } -> Pokemon
+createPokemon : PokeRecord -> Pokemon
 createPokemon pokeRecord =
     Pokemon pokeRecord
 
@@ -29,18 +33,106 @@ getFirst150 options =
         }
 
 
+initEmptyPokemon : Pokemon
+initEmptyPokemon =
+    createPokemon { name = "", order = 0, picture = "", types = [] }
+
+
+getPokemon : { name : String, onResponse : Result Http.Error Pokemon -> msg } -> Cmd msg
+getPokemon options =
+    Http.get
+        { url = "http://localhost:5000/api/v2/pokemon/" ++ options.name
+        , expect = Http.expectJson options.onResponse pokemonDetailsDecoder
+        }
+
+
 pokeApiDecoder : Json.Decode.Decoder (List Pokemon)
 pokeApiDecoder =
-    Json.Decode.field "results" (Json.Decode.list pokemonDecoder)
+    Json.Decode.field "results" (Json.Decode.list pokemonNameDecoder)
 
 
-pokemonDecoder =
+pokemonNameDecoder =
     Json.Decode.field "name" Json.Decode.string |> Json.Decode.andThen pokemonFromString
 
 
 pokemonFromString : String -> Json.Decode.Decoder Pokemon
 pokemonFromString pokeName =
-    Json.Decode.succeed (createPokemon (PokeRecord pokeName))
+    Json.Decode.succeed (createPokemon (PokeRecord pokeName 0 "" []))
+
+
+pokemonFromPokeRecord : String -> Int -> String -> List String -> Json.Decode.Decoder Pokemon
+pokemonFromPokeRecord name order pictureUrl types =
+    Json.Decode.succeed (createPokemon (PokeRecord name order pictureUrl types))
+
+
+
+{- pokemonDetailsDecoder : Json.Decode.Decoder Pokemon
+   pokemonDetailsDecoder =
+       Json.Decode.map3 pokemonFromPokeRecord
+           (Json.Decode.at [ "name" ] Json.Decode.string)
+           (Json.Decode.at [ "order" ] Json.Decode.int)
+           (Json.Decode.at [ "sprites", "other", "official-artwork", "front_default" ] Json.Decode.string)
+-}
+
+
+pokemonDetailsDecoder : Json.Decode.Decoder Pokemon
+pokemonDetailsDecoder =
+    let
+        pokeRecordDecoder =
+            Json.Decode.map4 PokeRecord
+                (Json.Decode.field "name" Json.Decode.string)
+                (Json.Decode.field "order" Json.Decode.int)
+                (Json.Decode.field "sprites" spriteUrlFieldDecoder)
+                (Json.Decode.field "types" typesFieldDecoder)
+    in
+    Json.Decode.map Pokemon pokeRecordDecoder
+
+
+
+{- Json.Decode.succeed pokemonFromPokeRecord
+   |> required "name" Json.Decode.string
+   |> required "order" Json.Decode.int
+   |> requiredAt [ "sprites", "other", "official-artwork", "front_default" ] Json.Decode.string
+   |> required "types" (Json.Decode.list pokemonTypeDecoder)
+-}
+{- Json.Decode.succeed
+   (\name order pictureUrl types -> pokemonFromPokeRecord name order pictureUrl types)
+   |> required "name" Json.Decode.string
+   |> required "order" Json.Decode.int
+   |> requiredAt [ "sprites", "other", "official-artwork", "front_default" ] Json.Decode.string
+   |> required "types" (Json.Decode.list pokemonTypeDecoder)
+-}
+{- Json.Decode.map4 pokemonFromPokeRecord
+   (Json.Decode.field "name" Json.Decode.string)
+   (Json.Decode.field "order" Json.Decode.int)
+   (Json.Decode.at [ "sprites", "other", "official-artwork", "front_default" ] Json.Decode.string)
+   (Json.Decode.field "types" (Json.Decode.list pokemonTypeDecoder))
+-}
+
+
+nameFieldDecoder =
+    Json.Decode.field "name" Json.Decode.string
+
+
+pokeIdFieldDecoder =
+    Json.Decode.field "order" Json.Decode.int
+
+
+spriteUrlFieldDecoder : Json.Decode.Decoder String
+spriteUrlFieldDecoder =
+    --[ "sprites", "other", "official-artwork", "front_default" ]
+    Json.Decode.at
+        [ "other", "official-artwork", "front_default" ]
+        Json.Decode.string
+
+
+typesFieldDecoder : Json.Decode.Decoder (List String)
+typesFieldDecoder =
+    Json.Decode.list pokemonTypeDecoder
+
+
+pokemonTypeDecoder =
+    Json.Decode.at [ "type", "name" ] Json.Decode.string
 
 
 viewPokemonList : List Pokemon -> Html msg
@@ -97,3 +189,24 @@ getPokemonName pokemon =
     case pokemon of
         Pokemon pokeRecord ->
             pokeRecord.name
+
+
+getPokedexId : Pokemon -> Int
+getPokedexId pokemon =
+    case pokemon of
+        Pokemon pokeRecord ->
+            pokeRecord.order
+
+
+getPokemonPicture : Pokemon -> String
+getPokemonPicture pokemon =
+    case pokemon of
+        Pokemon pokeRecord ->
+            pokeRecord.picture
+
+
+getPokemonTypes : Pokemon -> List String
+getPokemonTypes pokemon =
+    case pokemon of
+        Pokemon pokeRecord ->
+            pokeRecord.types

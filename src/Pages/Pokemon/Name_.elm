@@ -1,8 +1,11 @@
 module Pages.Pokemon.Name_ exposing (Model, Msg, page)
 
+import Api
 import Html exposing (Html)
-import Html.Attributes exposing (class)
+import Html.Attributes exposing (alt, class, src, style)
+import Http
 import Page exposing (Page)
+import Pokemon exposing (..)
 import Route.Path
 import View exposing (View)
 
@@ -10,7 +13,7 @@ import View exposing (View)
 page : { name : String } -> Page Model Msg
 page params =
     Page.element
-        { init = init
+        { init = init params
         , update = update
         , subscriptions = subscriptions
         , view = view params
@@ -22,13 +25,17 @@ page params =
 
 
 type alias Model =
-    {}
+    { pokemonData : Api.Data Pokemon
+    , pokemon : Pokemon
+    }
 
 
-init : ( Model, Cmd Msg )
-init =
-    ( {}
-    , Cmd.none
+init : { name : String } -> ( Model, Cmd Msg )
+init params =
+    ( { pokemonData = Api.Loading
+      , pokemon = Pokemon.initEmptyPokemon
+      }
+    , getPokemon { name = params.name, onResponse = PokeApiResponded }
     )
 
 
@@ -37,16 +44,19 @@ init =
 
 
 type Msg
-    = ExampleMsgReplaceMe
+    = PokeApiResponded (Result Http.Error Pokemon)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        ExampleMsgReplaceMe ->
-            ( model
+        PokeApiResponded (Ok pokemon) ->
+            ( { model | pokemonData = Api.Success pokemon, pokemon = pokemon }
             , Cmd.none
             )
+
+        PokeApiResponded (Err httpError) ->
+            ( { model | pokemonData = Api.Failure httpError }, Cmd.none )
 
 
 
@@ -70,8 +80,50 @@ view params model =
             [ Html.h1 [ class "title is-1" ] [ Html.text params.name ]
             , Html.h2 [ class "subtitle is-6 is-underlined" ]
                 [ Html.a [ Route.Path.href Route.Path.Home_ ]
-                    [ Html.text "Back to Pokemon" ]
+                    [ Html.text "Back to pokemon" ]
                 ]
             ]
+        , case model.pokemonData of
+            Api.Loading ->
+                Html.div [ class "has-text-centered p-6" ]
+                    [ Html.text "Loading..." ]
+
+            Api.Success pokemon ->
+                viewPokemon pokemon
+
+            Api.Failure httpError ->
+                Html.div [ class "has-text-centered p-6" ]
+                    [ Html.text (Api.toUserFriendlyMessage httpError) ]
         ]
     }
+
+
+viewPokemon : Pokemon -> Html msg
+viewPokemon pokemon =
+    Html.div [ class "container p-6 has-text-centered" ]
+        [ viewPokemonImage pokemon
+        , Html.p [] [ Html.text ("Pokedex No. " ++ String.fromInt (getPokedexId pokemon)) ]
+        , viewPokemonTypes (getPokemonTypes pokemon)
+        ]
+
+
+viewPokemonImage : Pokemon -> Html msg
+viewPokemonImage pokemon =
+    Html.figure
+        [ class "image my-5 mx-auto"
+        , style "width" "256px"
+        , style "height" "256px"
+        ]
+        [ Html.img [ src (getPokemonPicture pokemon), alt (getPokemonName pokemon) ] []
+        ]
+
+
+viewPokemonTypes : List String -> Html msg
+viewPokemonTypes pokemonTypes =
+    Html.div [ class "tags is-centered py-4" ]
+        (List.map viewPokemonType pokemonTypes)
+
+
+viewPokemonType : String -> Html msg
+viewPokemonType pokemonType =
+    Html.span [ class "tag" ] [ Html.text pokemonType ]
